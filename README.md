@@ -204,4 +204,13 @@ install.bat / install.ps1, start.bat, probe.bat
 - **Language and testing.** UI strings are Russian. The bridge was tested with DeepSeek (`deepseek-flash`); other models
   should work but may follow the JSON format less strictly.
 
+## Contributing
+
+Contributions are welcome — bug reports, personas, translations (the UI is Russian-only for now), prompt tuning,
+new deal types, UI polish. See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup and guidelines.
+
+## License
+
+[MIT](LICENSE) — free to use, modify and distribute, including commercially; just keep the copyright notice.
+
 Not affiliated with Firaxis Games or 2K. Civilization is a trademark of Take-Two Interactive.

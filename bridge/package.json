@@ -14,5 +14,6 @@
   },
   "dependencies": {
     "yaml": "^2.5.0"
-  }
+  },
+  "license": "MIT"
 }

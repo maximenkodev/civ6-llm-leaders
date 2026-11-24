@@ -1,0 +1,55 @@
+# Syntax checks for every push and pull request.
+# Uses the `pull_request` trigger (not `pull_request_target`), read-only permissions and no secrets,
+# so it is safe to run on pull requests from forks.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install bridge dependencies
+        working-directory: bridge
+        run: npm ci --no-audit --no-fund
+
+      - name: Check JavaScript syntax
+        run: |
+          for f in bridge/src/*.js bridge/probe.js bridge/dev/*.js; do
+            node --check "$f"
+          done
+
+      - name: Check YAML files parse
+        working-directory: bridge
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs"; import YAML from "yaml";
+            for (const f of ["config.example.yaml", "personas.yaml"]) { YAML.parse(fs.readFileSync(f, "utf8")); console.log("ok", f); }'
+
+      - name: Check Lua syntax (Lua 5.1, as in the game)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq lua5.1
+          for f in mod/LLMLeaders/UI/*.lua; do
+            luac5.1 -p "$f"
+          done
+
+      - name: Check for committed secrets
+        run: |
+          if [ -f bridge/config.yaml ]; then echo "bridge/config.yaml must not be committed"; exit 1; fi
+          if grep -rnE "sk-[A-Za-z0-9_-]{20,}" --exclude-dir=node_modules --exclude-dir=.git \
+               --include='*.js' --include='*.yaml' --include='*.yml' --include='*.lua' --include='*.md' . ; then
+            echo "Something that looks like an API key was found"; exit 1
+          fi

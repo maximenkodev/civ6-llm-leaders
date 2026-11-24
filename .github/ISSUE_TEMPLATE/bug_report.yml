@@ -1,0 +1,37 @@
+name: Bug report
+description: Something doesn't work in the mod or the bridge
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! **Do not paste your API key** — remove it from logs and screenshots.
+        Security problems go to *Security → Report a vulnerability*, not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Bridge output
+      description: Relevant lines from the bridge window (start.bat) or probe-report.txt.
+      render: text
+  - type: input
+    id: provider
+    attributes:
+      label: LLM provider and model
+      placeholder: e.g. DeepSeek / deepseek-flash
+  - type: input
+    id: game
+    attributes:
+      label: Game version and DLCs
+      placeholder: e.g. Gathering Storm, all DLCs
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: For UI problems, drag and drop screenshots here.

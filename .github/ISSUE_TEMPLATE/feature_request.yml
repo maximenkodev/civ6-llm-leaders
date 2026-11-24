@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest new diplomacy, deals, events or UI
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe the gameplay — what leaders should do, say or trade.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why?
+      description: What situation in the game made you want this?
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd like to help implement this

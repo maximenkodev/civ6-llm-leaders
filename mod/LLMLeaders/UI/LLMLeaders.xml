@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- LLM Leaders: окно чата с лидерами -->
+<Context Name="LLMLeaders">
+
+  <!-- Кнопка открытия окна (по центру, под верхней панелью) -->
+  <GridButton ID="OpenButton" Anchor="C,T" Offset="0,38" Size="190,32" Style="MainButton" String=""/>
+
+  <!-- Главное окно -->
+  <Container ID="Window" Anchor="C,C" Size="980,640" Hidden="1">
+    <!-- Перехват мыши, чтобы клики не проходили на карту -->
+    <BoxButton Size="parent,parent" Color="0,0,0,0" ConsumeMouseButton="1" ConsumeMouseWheel="1"/>
+    <Grid Size="parent,parent" Style="DropShadow2" Color="255,255,255,200"/>
+    <Grid ID="Frame" Size="parent-6,parent-6" Anchor="C,C" Style="EventPopupFrame">
+
+      <!-- Заголовок -->
+      <Grid Style="EventPopupTitleBar" Size="parent-32,52" Offset="0,14" Anchor="C,T">
+        <Label ID="Title" Style="FontFlair22" Color0="235,225,200,255" FontStyle="Shadow" Anchor="C,C" String=""/>
+      </Grid>
+      <Button ID="CloseButton" Anchor="R,T" Offset="8,8" Style="CloseButtonLarge"/>
+
+      <!-- Статус моста -->
+      <Label ID="BridgeStatus" Anchor="L,T" Offset="28,70" Style="FontNormal12" Color0="200,200,200,255" String=""/>
+
+      <!-- Список лидеров -->
+      <Container Anchor="L,T" Offset="22,92" Size="230,parent-120">
+        <Box Size="parent,parent" Color="0,0,0,90"/>
+        <ScrollPanel ID="LeaderScroll" Size="parent-6,parent-8" Offset="3,4" Vertical="1" AutoScrollBar="1">
+          <ScrollBar Style="Slider_Blue" Anchor="R,T" Offset="-2,0"/>
+          <Stack ID="LeaderStack" StackGrowth="Bottom" StackPadding="4" Anchor="L,T"/>
+        </ScrollPanel>
+      </Container>
+
+      <!-- Правая часть: переписка -->
+      <Container ID="ChatArea" Anchor="L,T" Offset="262,92" Size="parent-290,parent-120">
+        <Label ID="LeaderHeader" Anchor="L,T" Offset="4,0" Style="FontFlair16" Color0="240,215,140,255" String=""/>
+        <Label ID="LeaderSubHeader" Anchor="L,T" Offset="4,22" Style="FontNormal12" Color0="190,190,190,255" String=""/>
+        <!-- Действующие договоры с этим лидером (высота по содержимому, область сообщений сдвигается) -->
+        <Label ID="LeaderTreaties" Anchor="L,T" Offset="4,40" WrapWidth="670" Style="FontNormal12" Color0="150,215,150,255" String=""/>
+
+        <!-- Размеры и положение панели сообщений пересчитываются в LayoutChat() -->
+        <Container ID="MessagePanel" Anchor="L,T" Offset="0,42" Size="parent,parent-150">
+          <Box ID="MessageBg" Size="parent,parent" Color="0,0,0,110"/>
+          <ScrollPanel ID="MessageScroll" Size="parent-8,parent-8" Offset="4,4" Vertical="1" AutoScrollBar="1">
+            <ScrollBar Style="Slider_Blue" Anchor="R,T" Offset="-2,0"/>
+            <Stack ID="MessageStack" StackGrowth="Bottom" StackPadding="8" Anchor="L,T"/>
+          </ScrollPanel>
+        </Container>
+
+        <!-- Карточка сделки -->
+        <Container ID="DealCard" Anchor="L,B" Offset="0,44" Size="parent,58" Hidden="1">
+          <Box ID="DealBg" Size="parent,parent" Color="60,45,10,200"/>
+          <Label ID="DealText" Anchor="L,T" Offset="10,8" WrapWidth="420" Style="FontNormal14" Color0="250,230,170,255" String=""/>
+          <GridButton ID="DealAccept" Anchor="R,C" Offset="128,0" Size="110,30" Style="MainButton" String=""/>
+          <GridButton ID="DealDecline" Anchor="R,C" Offset="10,0" Size="110,30" Style="MainButton" String=""/>
+        </Container>
+
+        <!-- Поле ввода -->
+        <Container ID="InputArea" Anchor="L,B" Offset="0,0" Size="parent,36">
+          <Box Size="parent-130,parent" Color="10,30,50,230"/>
+          <EditBox ID="InputBox" Anchor="L,C" Offset="8,0" Size="parent-146,22" MaxLength="400" KeepFocus="1" EditMode="1" Style="FontNormal14" Color0="230,230,235,255" Color1="16,43,67,100" CursorColor="220,220,230"/>
+          <GridButton ID="SendButton" Anchor="R,C" Offset="0,0" Size="120,34" Style="MainButton" String=""/>
+        </Container>
+      </Container>
+    </Grid>
+  </Container>
+
+  <!-- ================= Instances ================= -->
+  <Instance Name="LeaderInstance">
+    <Button ID="Button" Size="214,44">
+      <Box ID="Bg" Size="parent,parent" Color="20,45,75,230"/>
+      <Box ID="Sel" Size="parent,parent" Color="150,110,30,200" Hidden="1"/>
+      <Box Anchor="L,B" Size="parent,1" Color="90,120,150,160"/>
+      <Label ID="Name" Anchor="L,C" Offset="10,-8" Style="FontNormal14" Color0="245,240,225,255" TruncateWidth="190" TruncatedTooltip="1"/>
+      <Label ID="Info" Anchor="L,C" Offset="10,9" Style="FontNormal12" Color0="185,195,205,255" TruncateWidth="190"/>
+    </Button>
+  </Instance>
+
+  <Instance Name="MessageInstance">
+    <Stack ID="Root" StackGrowth="Bottom" StackPadding="2" Anchor="L,T">
+      <Label ID="Author" Style="FontNormal12" Color0="240,215,140,255"/>
+      <Label ID="Text" Style="FontNormal14" WrapWidth="640" Color0="235,235,235,255"/>
+    </Stack>
+  </Instance>
+
+</Context>

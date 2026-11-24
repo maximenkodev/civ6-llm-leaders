@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="b44ba14d-e75e-4f87-9488-316e4322b6e9" version="1">
+	<Properties>
+		<Name>LLM Leaders (ИИ-лидеры)</Name>
+		<Teaser>Лидеры общаются, торгуют и принимают решения через языковую модель.</Teaser>
+		<Description>Чат с лидерами свободным текстом, уникальные реплики, торговля и дипломатия через LLM. Требует запущенного моста (bridge) и включённого FireTuner (EnableTuner 1).</Description>
+		<Authors>LLM Leaders</Authors>
+		<CompatibleVersions>2.0</CompatibleVersions>
+		<AffectsSavedGames>0</AffectsSavedGames>
+	</Properties>
+	<References>
+		<Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+	</References>
+	<InGameActions>
+		<ImportFiles id="LLMLeaders_Import">
+			<File>UI/LLMLeaders.lua</File>
+			<File>UI/LLMLeaders.xml</File>
+			<File>UI/LLMJson.lua</File>
+		</ImportFiles>
+		<AddUserInterfaces id="LLMLeaders_UI">
+			<Properties>
+				<Context>InGame</Context>
+			</Properties>
+			<File>UI/LLMLeaders.xml</File>
+		</AddUserInterfaces>
+	</InGameActions>
+	<Files>
+		<File>UI/LLMLeaders.lua</File>
+		<File>UI/LLMLeaders.xml</File>
+		<File>UI/LLMJson.lua</File>
+	</Files>
+</Mod>

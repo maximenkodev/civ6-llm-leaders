@@ -1,0 +1,5 @@
+node_modules/
+bridge/config.yaml
+bridge/data/
+bridge/probe-report.txt
+bridge/bridge-live.log

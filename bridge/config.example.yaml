@@ -1,0 +1,88 @@
+# Скопируйте этот файл в config.yaml и заполните.
+
+llm:
+  # openai    — любой OpenAI-совместимый API: OpenAI, DeepSeek, OpenRouter, Groq, Ollama, LM Studio…
+  # anthropic — Claude
+  provider: openai
+  # Адрес API (для openai-совместимых). Примеры:
+  #   OpenAI:     https://api.openai.com/v1
+  #   DeepSeek:   https://api.deepseek.com/v1
+  #   OpenRouter: https://openrouter.ai/api/v1
+  #   Ollama:     http://localhost:11434/v1   (ключ не нужен)
+  base_url: https://api.openai.com/v1
+  # Ключ API. Можно не писать здесь, а задать переменную окружения LLM_API_KEY.
+  api_key: ""
+  # Модель для диалогов (укажите актуальную модель вашего провайдера)
+  model: gpt-4o-mini
+  # Модель для фоновых стратегических решений (пусто = та же). Лучше дешёвая.
+  background_model: ""
+  temperature: 0.9
+  max_tokens: 700
+  # Режим JSON (response_format). Выключите, если провайдер его не поддерживает.
+  json_mode: true
+
+  # Доп. параметры запроса (необязательно). Для DeepSeek: отключить «размышления» (дешевле и быстрее):
+  # extra_body:
+  #   thinking: { type: disabled }
+
+# Язык реплик лидеров
+language: русский
+
+tuner:
+  host: 127.0.0.1
+  port: 4318
+  poll_ms: 500
+  debug: false
+
+behavior:
+  # Лидеры сами пишут игроку: не чаще раза в N ходов, с вероятностью chance
+  proactive_every_turns: 3
+  proactive_chance: 0.5
+  # Результат разговора меняет отношение стандартного ИИ (AdjustBaseDiplomacy)
+  sync_native_opinion: true
+  # Может ли лидер объявить войну игроку по итогам разговора/стратегии
+  allow_war_on_player: true
+  # Лидер реагирует репликой на принятую сделку
+  react_to_accepted_deals: true
+  # Длина реплик лидеров: short — одно короткое предложение по сути, normal — развёрнуто (1–4 предложения)
+  reply_style: short
+  # Показывать в чате лидеров, с которыми вы ещё не встретились (для тестов)
+  allow_unmet: false
+
+strategy:
+  # Стратегический слой: LLM раз в N ходов решает вопросы войны/мира/отношений
+  enabled: true
+  every_turns: 8
+  # Разрешить войны между ИИ-лидерами по решению LLM
+  allow_ai_wars: true
+
+
+world:
+  # Мировая дипломатия: лидеры-боты ведут переговоры между собой, подписывают договоры, создают блоки.
+  # Всё видно в окне чата: «Мировая хроника» и «Договоры и блоки».
+  enabled: true
+  # Раз в сколько ходов проходят переговоры и сколько пар лидеров участвует за раз
+  every_turns: 1
+  negotiations_per_turn: 1
+  # Раундов в переговорах: 2 — предложение и ответ, 3 — ещё и встречное предложение
+  max_rounds: 3
+  # Сколько союзников за ход решают, вступаться ли за жертву нападения
+  defense_calls_per_turn: 3
+  # Разрешить соглашения о совместной войне против третьей державы
+  allow_joint_war: true
+  # Как показывать переговоры в хронике: summary — кратко «кто что предлагает и ждёт», full — полные реплики
+  chronicle_style: summary
+  # Сколько записей хранить в хронике и сколько возвращать в окно после загрузки сейва
+  chronicle_size: 40
+  restore_entries: 12
+  # Модель для переговоров (пусто = основная)
+  model: ""
+
+limits:
+  # Максимум фоновых вызовов LLM за ход (ответы на ваши сообщения не ограничиваются)
+  max_calls_per_turn: 30
+  # Сколько последних сообщений переписки передавать в промпт
+  history_messages: 16
+
+# Показывать в чате служебные сообщения (отброшенные сделки и т.п.)
+debug: false

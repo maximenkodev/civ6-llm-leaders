@@ -47,6 +47,12 @@ export class WorldDiplomacy {
     return x;
   }
   log(...a) { this.brain.log(...a); }
+  get t() { return this.brain.t; }
+  q(x) { return this.brain.uiLang === 'ru' ? `«${x}»` : `“${x}”`; }
+  kindName(kind) { return KINDS[kind] ? this.t('kind_' + kind) : kind; }
+  blocType(type) { return this.t('bloc_' + type); }
+  // язык текстов, которые пишет LLM (реплики, сводки, названия документов)
+  get lang() { return this.brain.cfg.language || 'русский'; }
   enabled() { return this.cfg.enabled !== false; }
   name(id) { return this.brain.player(id)?.leader ?? `игрок ${id}`; }
 
@@ -115,7 +121,7 @@ export class WorldDiplomacy {
     if (!kind) return null;
     const p = {
       kind,
-      title: String(raw.title || '').trim().slice(0, 120) || (KINDS[kind] ? capitalize(KINDS[kind].ru) : 'Соглашение'),
+      title: String(raw.title || '').trim().slice(0, 120) || (KINDS[kind] ? capitalize(this.kindName(kind)) : 'Agreement'),
       summary: cut(raw.summary, 300),
       duration: 0,
       initiator: initiator.id,
@@ -138,54 +144,57 @@ export class WorldDiplomacy {
 
   // Проверка документа по правилам игры. Возвращает текст проблемы или null.
   validate(A, B, p) {
-    if (!KINDS[p.kind]) return `неизвестный вид документа «${p.kind}»`;
+    if (!KINDS[p.kind]) return this.t('v_unknown_kind', { kind: p.kind });
     const rel = A.relations[String(B.id)];
-    if (!rel) return `${A.leader} и ${B.leader} не знакомы`;
+    if (!rel) return this.t('v_not_met', { a: A.leader, b: B.leader });
     const atWar = !!rel.atWar;
     for (const [giver, items] of [[A, p.initiator_gives], [B, p.partner_gives]]) {
       for (const i of items) {
-        if (i.type === 'peace') return 'мир оформляется документом вида peace';
+        if (i.type === 'peace') return this.t('v_peace_item');
         const prob = this.brain.validateItem(giver, i);
         if (prob) return prob;
       }
     }
-    if (atWar && !['peace', 'memorandum'].includes(p.kind)) return 'стороны воюют — сначала нужен мирный договор';
-    if (p.kind === 'peace' && !atWar) return 'войны между сторонами нет';
+    if (atWar && !['peace', 'memorandum'].includes(p.kind)) return this.t('v_at_war');
+    if (p.kind === 'peace' && !atWar) return this.t('v_no_war');
     if (['non_aggression', 'defense_pact', 'friendship', 'alliance'].includes(p.kind) &&
         this.treatiesBetween(A.id, B.id).some((t) => t.kind === p.kind)) {
-      return `такой договор (${KINDS[p.kind].ru}) уже действует`;
+      return this.t('v_dup', { kind: this.kindName(p.kind) });
     }
     if (p.kind === 'bloc_create') {
-      if (!p.bloc_name) return 'у блока нет названия';
-      if (this.d.blocs.some((b) => b.name.toLowerCase() === p.bloc_name.toLowerCase())) return `блок «${p.bloc_name}» уже существует`;
+      if (!p.bloc_name) return this.t('v_bloc_noname');
+      if (this.d.blocs.some((b) => b.name.toLowerCase() === p.bloc_name.toLowerCase())) return this.t('v_bloc_exists', { name: p.bloc_name });
     }
     if (p.kind === 'bloc_join') {
       const bloc = this.blocById(p.bloc_id);
-      if (!bloc) return `нет блока с id ${p.bloc_id}`;
+      if (!bloc) return this.t('v_no_bloc', { id: p.bloc_id });
       const inA = bloc.members.includes(A.id), inB = bloc.members.includes(B.id);
-      if (inA === inB) return inA ? 'обе стороны уже в этом блоке' : 'ни одна из сторон не состоит в этом блоке';
+      if (inA === inB) return inA ? this.t('v_both_in') : this.t('v_none_in');
     }
     if (p.kind === 'joint_war') {
       const T = this.brain.player(p.target_id);
-      if (!T || T.id === A.id || T.id === B.id) return 'не указана держава-цель (target_id)';
-      if (T.human && this.brain.b.allow_war_on_player === false) return 'войны против игрока запрещены настройками';
-      if (!T.human && this.brain.cfg.strategy?.allow_ai_wars === false) return 'войны между ИИ запрещены настройками';
-      if (this.cfg.allow_joint_war === false) return 'совместные войны запрещены настройками';
-      if (A.relations[String(T.id)]?.atWar && B.relations[String(T.id)]?.atWar) return `обе стороны уже воюют с ${T.leader}`;
+      if (!T || T.id === A.id || T.id === B.id) return this.t('v_no_target');
+      if (T.human && this.brain.b.allow_war_on_player === false) return this.t('v_no_war_player');
+      if (!T.human && this.brain.cfg.strategy?.allow_ai_wars === false) return this.t('v_no_ai_wars');
+      if (this.cfg.allow_joint_war === false) return this.t('v_no_joint');
+      if (A.relations[String(T.id)]?.atWar && B.relations[String(T.id)]?.atWar) return this.t('v_both_at_war', { who: T.leader });
     }
     return null;
   }
 
   proposalText(p, short = false) {
     const A = this.brain.player(p.initiator), B = this.brain.player(p.partner);
-    const parts = [`«${p.title}» (${KINDS[p.kind]?.ru || p.kind})`];
-    if (p.kind === 'bloc_create') parts.push(short ? `блок «${p.bloc_name}» (${BLOC_RU[p.bloc_type]})` : `блок «${p.bloc_name}» (${BLOC_RU[p.bloc_type]}): ${cut(p.bloc_goal, 200)}`);
-    else if (p.summary && !short) parts.push(cut(p.summary, 220));
-    if (p.kind === 'bloc_join') { const bl = this.blocById(p.bloc_id); if (bl) parts.push(`блок «${bl.name}»`); }
-    if (p.kind === 'joint_war') parts.push(`против: ${this.name(p.target_id)}`);
-    if (p.initiator_gives.length) parts.push(`${A?.leader} передаёт: ${this.brain.itemsText(p.initiator_gives)}`);
-    if (p.partner_gives.length) parts.push(`${B?.leader} передаёт: ${this.brain.itemsText(p.partner_gives)}`);
-    parts.push(p.duration ? `срок ${p.duration} ход.` : 'бессрочно');
+    const t = this.t;
+    const parts = [`${this.q(p.title)} (${this.kindName(p.kind)})`];
+    if (p.kind === 'bloc_create') {
+      const b = t('bloc_short', { name: p.bloc_name, type: this.blocType(p.bloc_type) });
+      parts.push(short ? b : `${b}: ${cut(p.bloc_goal, 200)}`);
+    } else if (p.summary && !short) parts.push(cut(p.summary, 220));
+    if (p.kind === 'bloc_join') { const bl = this.blocById(p.bloc_id); if (bl) parts.push(t('bloc_short', { name: bl.name, type: this.blocType(bl.type) })); }
+    if (p.kind === 'joint_war') parts.push(t('against', { who: this.name(p.target_id) }));
+    if (p.initiator_gives.length) parts.push(t('gives', { who: A?.leader, items: this.brain.itemsText(p.initiator_gives) }));
+    if (p.partner_gives.length) parts.push(t('gives', { who: B?.leader, items: this.brain.itemsText(p.partner_gives) }));
+    parts.push(t('duration', { turns: p.duration }));
     return parts.join('; ');
   }
 
@@ -269,9 +278,9 @@ export class WorldDiplomacy {
         const M = this.brain.player(m);
         if (M) this.mem.addNote(this.brain.key(M), `Ход ${turn}: ${by.leader} вышел из блока «${bl.name}»`, turn);
       }
-      const text = `${by.leader} вышел из блока «${bl.name}»${bl.members.length < 2 ? ' — блок распался' : ''}`;
+      const text = this.t('left_bloc', { who: by.leader, bloc: bl.name, dissolved: bl.members.length < 2 });
       this.mem.addWorld(text, turn);
-      await this.publish({ turn, title: 'Выход из блока', items: [{ author: '[COLOR_Grey]Хроника[ENDCOLOR]', text: text + '.', kind: 'outcome' }] });
+      await this.publish({ turn, title: this.t('t_left_bloc'), items: [{ author: `[COLOR_Grey]${this.t('chron')}[ENDCOLOR]`, text: text + '.', kind: 'outcome' }] });
       await this.sendTreaties();
       this.mem.save();
       return text;
@@ -291,11 +300,11 @@ export class WorldDiplomacy {
         await this.game.removeFriendship(byId, o).catch((e) => this.log(`[world] дружба: ${e.message}`));
       }
     }
-    let text = `${by.leader} расторг «${t.title}» (${k.ru || t.kind}) с ${others.map((o) => this.name(o)).join(', ')}`;
-    if (k.gameAlliance) text += '. Союз в самой игре нельзя прервать досрочно — он истечёт сам (обычно через 30 ходов), не продлевайте его';
+    let text = this.t('terminated', { who: by.leader, title: t.title, kind: this.kindName(t.kind), others: others.map((o) => this.name(o)).join(', ') });
+    if (k.gameAlliance) text += this.t('alliance_note');
     this.mem.addWorld(text, turn);
     this.log(`[world] ${text}`);
-    await this.publish({ turn, title: 'Расторжение договора', items: [{ author: '[COLOR_Grey]Хроника[ENDCOLOR]', text: text + '.', kind: 'outcome' }] });
+    await this.publish({ turn, title: this.t('t_terminated'), items: [{ author: `[COLOR_Grey]${this.t('chron')}[ENDCOLOR]`, text: text + '.', kind: 'outcome' }] });
     await this.sendTreaties();
     this.mem.save();
     return text;
@@ -366,8 +375,8 @@ export class WorldDiplomacy {
         t.status = 'expired';
         const who = t.parties.map((x) => this.name(x)).join(' и ');
         this.mem.addWorld(`Истёк срок «${t.title}» (${who})`, turn);
-        await this.publish({ turn, title: 'Истёк срок договора', items: [
-          { author: '[COLOR_Grey]Хроника[ENDCOLOR]', text: `Истёк срок «${t.title}» (${KINDS[t.kind]?.ru}) между: ${who}.`, kind: 'system' },
+        await this.publish({ turn, title: this.t('t_expired'), items: [
+          { author: `[COLOR_Grey]${this.t('chron')}[ENDCOLOR]`, text: this.t('o_expired', { title: t.title, kind: this.kindName(t.kind), who: t.parties.map((x) => this.name(x)).join(', ') }), kind: 'system' },
         ] });
       }
     }
@@ -376,7 +385,8 @@ export class WorldDiplomacy {
 
   systemFor(self, other, initiator, partner, role) {
     const human = this.brain.human();
-    const sum = '"summary": "короткая фраза для дипломатической сводки (до 25 слов), БЕЗ своего имени, начинается с глагола (например «Предлагает… взамен на…», «Отклоняет, потому что…»): ';
+    const ex = this.brain.uiLang === 'ru' ? '«Предлагает… взамен на…», «Отклоняет, потому что…»' : '"Offers … in exchange for …", "Rejects, because …"';
+    const sum = `"summary": "короткая фраза для дипломатической сводки НА ЯЗЫКЕ ${this.lang} (до 25 слов), БЕЗ своего имени, начинается с глагола (например ${ex}): `;
     const roleFmt = {
       initiator: `{"message": "твоя реплика партнёру", ${sum}что предлагает и чего ожидает взамен / чего добивается", "proposal": null или документ, "opinion_change": целое от -5 до 5}`,
       responder: `{"message": "твой ответ", ${sum}как отвечает — принимает, отклоняет или выдвигает свои условия, и почему", "decision": "accept" | "reject" | "counter" | "none" (none — если документа не предлагали), "counter": null или документ (встречное предложение), "opinion_change": целое от -5 до 5}`,
@@ -388,6 +398,7 @@ export class WorldDiplomacy {
 ${this.brain.persona(self)}
 
 Сейчас идут ЗАКРЫТЫЕ ПЕРЕГОВОРЫ между тобой и ${other.leader} («${other.civ}») — без игрока-человека (${human?.leader ?? 'игрок'}).
+Все тексты для хроники (message, summary, а в документах title, summary, bloc_name, bloc_goal) пиши на языке: ${this.lang}.
 Говори как настоящий политик на переговорах, по существу. ${this.brain.brevity()} Можно договариваться,
 торговаться, давить, угрожать, льстить, обсуждать третьи страны (в том числе игрока ${human?.leader ?? ''}), предлагать документы.
 Интересы державы и характер важнее вежливости: не подписывай невыгодное и не соглашайся со всем подряд, но и не отвергай разумное.
@@ -555,10 +566,11 @@ ${instruction}
         try { signed = await this.sign(A2, B2, final, turn); } catch (e) { failure = e.message; }
       }
     }
-    if (signed) outcome = { author: '[COLOR_GREEN]Подписано[ENDCOLOR]', text: `[COLOR_GREEN]${this.proposalText(final, true)}[ENDCOLOR]`, kind: 'outcome' };
-    else if (failure) outcome = { author: '[COLOR_RED]Сорвалось[ENDCOLOR]', text: `Документ не удалось оформить: ${failure}.`, kind: 'outcome' };
-    else if (final) outcome = { author: '[COLOR_RED]Без соглашения[ENDCOLOR]', text: `Отклонено: ${this.proposalText(final, true)}`, kind: 'outcome' };
-    else outcome = { author: '[COLOR_Grey]Итог[ENDCOLOR]', text: 'Обмен мнениями без подписания документов.', kind: 'outcome' };
+    const t = this.t;
+    if (signed) outcome = { author: `[COLOR_GREEN]${t('signed')}[ENDCOLOR]`, text: `[COLOR_GREEN]${this.proposalText(final, true)}[ENDCOLOR]`, kind: 'outcome' };
+    else if (failure) outcome = { author: `[COLOR_RED]${t('failed')}[ENDCOLOR]`, text: t('o_failed', { problem: failure }), kind: 'outcome' };
+    else if (final) outcome = { author: `[COLOR_RED]${t('rejected')}[ENDCOLOR]`, text: t('o_rejected', { text: this.proposalText(final, true) }), kind: 'outcome' };
+    else outcome = { author: `[COLOR_Grey]${t('result')}[ENDCOLOR]`, text: t('o_talk'), kind: 'outcome' };
 
     // память лидеров о переговорах
     const brief = signed ? `подписали «${final.title}»` : final ? `не договорились о «${final.title}»` : 'обменялись мнениями';
@@ -570,7 +582,7 @@ ${instruction}
 
     await this.publish({
       turn,
-      title: `Переговоры: ${A.leader} и ${B.leader}`,
+      title: t('t_talks', { a: A.leader, b: B.leader }),
       items: [
         ...transcript.map((l) => (this.cfg.chronicle_style === 'full'
           ? { author: `${this.name(l.who)} → ${this.name(l.who === A.id ? B.id : A.id)}`, text: l.text, kind: 'leader' }
@@ -595,10 +607,9 @@ ${instruction}
       const C = this.brain.player(opts.extensionOf);
       const ended = this.treatiesBetween(a, b).filter((t) => KINDS[t.kind]?.binding);
       for (const t of ended) { t.status = 'terminated'; t.endedBy = a; t.endedTurn = turn; }
-      const text = `Война ${A.leader} против ${C?.leader ?? '?'} втянула и его союзника ${B.leader}` +
-        (ended.length ? ` (договоры ${ended.map((t) => `«${t.title}»`).join(', ')} утратили силу)` : '');
+      const text = this.t('war_ext', { a: A.leader, b: B.leader, c: C?.leader ?? '?', ended: ended.map((t) => `${this.q(t.title)}`).join(', ') });
       this.mem.addWorld(text, turn);
-      await this.publish({ turn, title: 'Война расширилась', items: [{ author: '[COLOR_RED]Хроника[ENDCOLOR]', text: text + '.', kind: 'outcome' }] });
+      await this.publish({ turn, title: this.t('t_war_ext'), items: [{ author: `[COLOR_RED]${this.t('chron')}[ENDCOLOR]`, text: text + '.', kind: 'outcome' }] });
       await this.sendTreaties();
       this.mem.save();
       return;
@@ -608,13 +619,12 @@ ${instruction}
       const C = this.brain.player(opts.ally);
       const ended = this.treatiesBetween(a, b).filter((t) => KINDS[t.kind]?.binding);
       for (const t of ended) { t.status = 'terminated'; t.endedBy = a; t.endedTurn = turn; }
-      const text = `${A.leader} вступил в войну против ${B.leader} на стороне союзника ${C?.leader ?? '?'}` +
-        (ended.length ? ` (договоры ${ended.map((t) => `«${t.title}»`).join(', ')} утратили силу)` : '');
+      const text = this.t('ally_war', { a: A.leader, b: B.leader, c: C?.leader ?? '?', ended: ended.map((t) => `${this.q(t.title)}`).join(', ') });
       this.mem.addWorld(text, turn);
       this.mem.addNote(this.brain.key(A), `Ход ${turn}: вступил в войну против ${B.leader}, защищая союзника ${C?.leader ?? ''}`, turn);
       if (!B.human) this.mem.addNote(this.brain.key(B), `Ход ${turn}: ${A.leader} вступил против нас в войну на стороне ${C?.leader ?? 'союзника'}`, turn);
-      await this.publish({ turn, title: 'Война на стороне союзника', items: [
-        { author: '[COLOR_RED]Хроника[ENDCOLOR]', text: text + '.', kind: 'outcome' },
+      await this.publish({ turn, title: this.t('t_ally_war'), items: [
+        { author: `[COLOR_RED]${this.t('chron')}[ENDCOLOR]`, text: text + '.', kind: 'outcome' },
       ] });
       await this.sendTreaties();
       this.mem.save();
@@ -642,14 +652,14 @@ ${instruction}
         const M = this.brain.player(m);
         if (M && m !== b) this.mem.addNote(this.brain.key(M), `Ход ${turn}: ${A.leader} напал на члена нашего блока ${B.leader} и исключён из «${bl.name}»`, turn);
       }
-      await this.publish({ turn, title: 'Вероломство', items: [
-        { author: '[COLOR_RED]Хроника[ENDCOLOR]', text: `${A.leader} объявил войну ${B.leader}, нарушив ${names}.` +
-          (blocs.length ? ` ${A.leader} исключён из блока.` : ''), kind: 'outcome' },
+      const what = [...broken.map((t) => `${this.q(t.title)}`), ...blocs.map((bl) => this.t('bloc_membership', { bloc: bl.name }))].join(', ');
+      await this.publish({ turn, title: this.t('t_perfidy'), items: [
+        { author: `[COLOR_RED]${this.t('chron')}[ENDCOLOR]`, text: this.t('perfidy', { a: A.leader, b: B.leader, what, expelled: blocs.length > 0 }), kind: 'outcome' },
       ] });
       await this.sendTreaties();
     } else if (!A.human && !B.human) {
-      await this.publish({ turn, title: 'Война', items: [
-        { author: '[COLOR_RED]Хроника[ENDCOLOR]', text: `${A.leader} объявил войну ${B.leader}.`, kind: 'outcome' },
+      await this.publish({ turn, title: this.t('t_war'), items: [
+        { author: `[COLOR_RED]${this.t('chron')}[ENDCOLOR]`, text: this.t('war', { a: A.leader, b: B.leader }), kind: 'outcome' },
       ] });
     }
 
@@ -702,8 +712,12 @@ ${instruction}
         ? `Ход ${turn}: ${A.leader} нанёс ${kind} удар по моей стране${ev.city ? ` (${ev.city})` : ''}. Такое не прощают.`
         : `Ход ${turn}: ${text}. Мир потрясён — этот правитель готов применять ядерное оружие.`, turn);
     }
-    await this.publish({ turn, title: 'ЯДЕРНЫЙ УДАР', items: [
-      { author: '[COLOR_RED]Хроника[ENDCOLOR]', text: `[COLOR_RED]${text}.[ENDCOLOR] Мир осуждает применение оружия массового уничтожения.`, kind: 'outcome' },
+    const thermo = Number(ev.wmd) === 1;
+    const whereT = V ? this.t('nuke_where_civ', { civ: V.civ, leader: V.leader, city: ev.city })
+      : ev.city ? this.t('nuke_where_city', { city: ev.city }) : this.t('nuke_where_none');
+    const shown = this.t('nuke', { a: A.leader, thermo, where: whereT });
+    await this.publish({ turn, title: this.t('t_nuke'), items: [
+      { author: `[COLOR_RED]${this.t('chron')}[ENDCOLOR]`, text: `[COLOR_RED]${shown}.[ENDCOLOR] ${this.t('nuke_condemn')}`, kind: 'outcome' },
     ] });
     if (V) await this.rallyAllies(A, V, turn, `${A.leader} («${A.civ}») нанёс ${kind} удар по ${V.leader} («${V.civ}»)${ev.city ? `, город ${ev.city}` : ''}`);
     this.mem.save();
@@ -714,7 +728,7 @@ ${instruction}
     const system = `Ты — ${C.leader}, правитель державы «${C.civ}» в Civilization VI. Ты полностью в роли.
 ТВОЙ ХАРАКТЕР:
 ${this.brain.persona(C)}
-Ответ — строго JSON: {"honor": true | false, "statement": "публичное заявление — ${this.brain.b.reply_style === 'normal' ? '1–3 предложения' : 'одно короткое предложение'}, в твоей манере"}`;
+Ответ — строго JSON: {"honor": true | false, "statement": "публичное заявление — ${this.brain.b.reply_style === 'normal' ? '1–3 предложения' : 'одно короткое предложение'}, в твоей манере, на языке: ${this.lang}"}`;
     const user = `${what || `${A.leader} («${A.civ}») объявил войну ${B.leader} («${B.civ}»)`}. Тебя связывает с ${B.leader}: ${why}.
 Выполнить союзнический долг — значит объявить войну ${A.leader}. Отказ подорвёт доверие союзников.
 === ТЫ ===
@@ -735,19 +749,19 @@ ${this.describeFor(C)}
       const allowed = A.human ? this.brain.b.allow_war_on_player !== false : this.brain.cfg.strategy?.allow_ai_wars !== false;
       if (allowed) {
         await this.game.declareWar(C.id, A.id).catch((e) => this.log(`[world] война: ${e.message}`));
-        note = `${C.leader} выполнил союзнический долг и объявил войну ${A.leader}`;
-      } else note = `${C.leader} поддержал ${B.leader}, но войну не объявил (запрещено настройками)`;
+        note = this.t('duty_war', { c: C.leader, a: A.leader });
+      } else note = this.t('duty_nowar', { c: C.leader, b: B.leader });
     } else {
-      note = `${C.leader} отказался вступиться за ${B.leader}`;
+      note = this.t('duty_refused', { c: C.leader, b: B.leader });
       await this.opinion(B.id, C.id, -6);
       this.mem.addNote(this.brain.key(B), `Ход ${turn}: ${C.leader} не пришёл на помощь, хотя был обязан (${why})`, turn);
     }
     this.mem.addWorld(note, turn);
     this.mem.addNote(this.brain.key(C), `Ход ${turn}: ${note}`, turn);
     this.log(`[world] ${note}`);
-    await this.publish({ turn, title: `Союзнический долг: ${C.leader}`, items: [
-      ...(statement ? [{ author: `${C.leader} (заявление)`, text: statement, kind: 'leader' }] : []),
-      { author: honor ? '[COLOR_RED]Решение[ENDCOLOR]' : '[COLOR_Grey]Решение[ENDCOLOR]', text: note + '.', kind: 'outcome' },
+    await this.publish({ turn, title: this.t('t_duty', { who: C.leader }), items: [
+      ...(statement ? [{ author: this.t('statement', { who: C.leader }), text: statement, kind: 'leader' }] : []),
+      { author: `${honor ? '[COLOR_RED]' : '[COLOR_Grey]'}${this.t('decision')}[ENDCOLOR]`, text: note + '.', kind: 'outcome' },
     ] });
   }
 
@@ -762,7 +776,7 @@ ${this.describeFor(C)}
 
   async sendEntry(entry, isNew) {
     const items = [
-      { author: `[COLOR_LIGHTBLUE]Ход ${entry.turn} · ${entry.title}[ENDCOLOR]`, text: '', kind: 'header' },
+      { author: `[COLOR_LIGHTBLUE]${this.t('turn_title', { turn: entry.turn, title: entry.title })}[ENDCOLOR]`, text: '', kind: 'header' },
       ...entry.items,
     ];
     await this.game.deliverChunked({ type: 'feed', feed: 'world', news: isNew }, 'items', items)
@@ -772,25 +786,25 @@ ${this.describeFor(C)}
   renderTreaties() {
     const items = [];
     const blocs = this.d.blocs.filter((b) => b.members.length >= 2);
-    items.push({ author: '[COLOR_LIGHTBLUE]Блоки и альянсы[ENDCOLOR]', text: blocs.length ? '' : 'Пока нет.', kind: 'header' });
+    const T = this.t;
+    items.push({ author: `[COLOR_LIGHTBLUE]${T('reg_blocs')}[ENDCOLOR]`, text: blocs.length ? '' : T('reg_none'), kind: 'header' });
     for (const b of blocs) {
-      items.push({ author: `«${b.name}» · ${BLOC_RU[b.type] || b.type} · с хода ${b.turn}`,
-        text: `Участники: ${b.members.map((m) => this.name(m)).join(', ')}\nЦель: ${b.goal}`, kind: 'leader' });
+      items.push({ author: T('reg_bloc', { name: b.name, type: this.blocType(b.type), turn: b.turn }),
+        text: T('reg_bloc_text', { members: b.members.map((m) => this.name(m)).join(', '), goal: b.goal }), kind: 'leader' });
     }
     const act = this.activeTreaties();
-    items.push({ author: '[COLOR_LIGHTBLUE]Действующие договоры[ENDCOLOR]', text: act.length ? '' : 'Пока нет.', kind: 'header' });
+    items.push({ author: `[COLOR_LIGHTBLUE]${T('reg_active')}[ENDCOLOR]`, text: act.length ? '' : T('reg_none'), kind: 'header' });
     for (const t of act.slice(-25).reverse()) {
-      items.push({ author: `«${t.title}» · ${KINDS[t.kind]?.ru || t.kind}`,
-        text: `${t.parties.map((x) => this.name(x)).join(' — ')}; с хода ${t.turn}${t.expires ? ` до хода ${t.expires}` : ', бессрочно'}` +
-          `${t.summary ? `\n${t.summary}` : ''}`, kind: 'leader' });
+      items.push({ author: T('reg_treaty', { title: t.title, kind: this.kindName(t.kind) }),
+        text: T('reg_treaty_text', { parties: t.parties.map((x) => this.name(x)).join(' — '), turn: t.turn, expires: t.expires, summary: t.summary }), kind: 'leader' });
     }
     const old = this.d.treaties.filter((t) => t.status !== 'active').slice(-10).reverse();
     if (old.length) {
-      items.push({ author: '[COLOR_LIGHTBLUE]Нарушенные, расторгнутые и истёкшие[ENDCOLOR]', text: '', kind: 'header' });
+      items.push({ author: `[COLOR_LIGHTBLUE]${T('reg_old')}[ENDCOLOR]`, text: '', kind: 'header' });
       for (const t of old) {
-        items.push({ author: `[COLOR_Grey]«${t.title}»[ENDCOLOR]`,
-          text: t.status === 'broken' ? `[COLOR_RED]нарушен: ${this.name(t.brokenBy)}, ход ${t.brokenTurn}[ENDCOLOR]`
-            : t.status === 'terminated' ? `расторгнут: ${this.name(t.endedBy)}, ход ${t.endedTurn}` : `истёк на ходу ${t.expires}`, kind: 'system' });
+        items.push({ author: `[COLOR_Grey]${this.q(t.title)}[ENDCOLOR]`,
+          text: t.status === 'broken' ? `[COLOR_RED]${T('reg_broken', { who: this.name(t.brokenBy), turn: t.brokenTurn })}[ENDCOLOR]`
+            : t.status === 'terminated' ? T('reg_terminated', { who: this.name(t.endedBy), turn: t.endedTurn }) : T('reg_expired', { turn: t.expires }), kind: 'system' });
       }
     }
     return items;
@@ -804,11 +818,10 @@ ${this.describeFor(C)}
     for (const p of this.snap?.players || []) {
       if (p.human) continue;
       const list = this.treatiesBetween(human.id, p.id).map((t) =>
-        `${KINDS[t.kind]?.ru || t.kind} «${cut(t.title, 60)}» (${t.expires ? `до хода ${t.expires}` : 'бессрочно'})`);
-      for (const bl of this.blocsOf(human.id)) if (bl.members.includes(p.id)) list.push(`общий блок «${cut(bl.name, 40)}»`);
+        this.t('tinfo_item', { kind: this.kindName(t.kind), title: cut(t.title, 60), expires: t.expires }));
+      for (const bl of this.blocsOf(human.id)) if (bl.members.includes(p.id)) list.push(this.t('tinfo_bloc', { name: cut(bl.name, 40) }));
       if (list.length) {
-        const shown = list.slice(0, 4).join(' · ');
-        out[String(p.id)] = `Договоры с вами: ${shown}${list.length > 4 ? ` · и ещё ${list.length - 4}` : ''}`;
+        out[String(p.id)] = this.t('tinfo', { list: list.slice(0, 4).join(' · '), more: list.length > 4 ? list.length - 4 : 0 });
       }
     }
     return out;

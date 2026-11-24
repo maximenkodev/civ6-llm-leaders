@@ -8,7 +8,8 @@ form alliances and blocs, keep (or break) their promises — and you watch it al
 
 Works with any OpenAI-compatible API (OpenAI, DeepSeek, OpenRouter, Groq, Ollama, LM Studio…) and with Anthropic Claude.
 
-> The in-game UI and the default prompts are in **Russian**. The language of the leaders' replies is set by `language` in the config.
+> **Languages.** The in-game window is available in **English and Russian**: it follows the game's language and can be forced
+> with `ui_language`. Leaders reply, and write treaty titles and chronicle summaries, in whatever language you set in `language`.
 
 ---
 
@@ -121,7 +122,8 @@ Only one program can be connected to FireTuner at a time, so close the official 
 | | `background_model` | cheaper model for the strategy layer (empty = same) |
 | | `json_mode` | use `response_format: json_object` |
 | | `extra_body` | extra request fields, e.g. DeepSeek: `thinking: { type: disabled }` |
-| | `language` | language of the leaders' replies (top-level key) |
+| | `language` | language of the leaders' replies and LLM-written texts, e.g. `English` (top-level key) |
+| | `ui_language` | mod window language: `auto` (from `language`), `en`, `ru` (top-level key) |
 | `behavior` | `reply_style` | `short` (one sentence) or `normal` |
 | | `proactive_every_turns`, `proactive_chance` | how often leaders write first |
 | | `sync_native_opinion` | conversations change the standard AI's opinion |
@@ -201,12 +203,16 @@ install.bat / install.ps1, start.bat, probe.bat
   when the human player is one of the parties, so AI-to-AI deals use gold, strategic resources, favor and units.
 - **Alliances.** A real in-game alliance cannot be ended early (a Civ VI rule); it expires on its own after its term.
   Terminating the alliance treaty in the mod removes all mod-side obligations right away.
-- **Language and testing.** UI strings are Russian. The bridge was tested with DeepSeek (`deepseek-flash`); other models
-  should work but may follow the JSON format less strictly.
+- **Language and testing.**
+  - The UI is English and Russian.
+  - The prompts sent to the LLM and the bridge console log are written in Russian internally. Models handle this fine;
+    translating them is a welcome contribution.
+  - The bridge was tested with DeepSeek (`deepseek-flash`). Other models should work but may follow the JSON format
+    less strictly.
 
 ## Contributing
 
-Contributions are welcome — bug reports, personas, translations (the UI is Russian-only for now), prompt tuning,
+Contributions are welcome — bug reports, personas, translations (UI: English and Russian so far), prompt tuning,
 new deal types, UI polish. See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup and guidelines.
 
 ## License

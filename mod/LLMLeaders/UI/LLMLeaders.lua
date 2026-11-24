@@ -48,6 +48,56 @@ local function Safe(fn, default)
 	return default;
 end
 
+-- ---------------------------------------------------------------------------
+-- Localization / Локализация интерфейса.
+-- Default = the game's language; the bridge can override it (config.ui_lang = "en" | "ru").
+-- ---------------------------------------------------------------------------
+local L10N = {
+	en = {
+		title = "AI Diplomacy", open_tip = "Open the chat with leaders (LLM)", close_tip = "Close (Esc)",
+		send = "Send", accept = "Accept", decline = "Decline",
+		pick_leader = "Select a leader on the left",
+		bridge_off = "[COLOR_RED]Bridge not connected[ENDCOLOR] — run the bridge (start.bat)",
+		bridge_on = "[COLOR_GREEN]Bridge connected[ENDCOLOR]  ",
+		chronicle = "World Chronicle", chronicle_info = "negotiations between leaders",
+		chronicle_sub = "Leaders' negotiations, treaties, breaches and allied duty",
+		treaties = "Treaties & Blocs", treaties_info = "active agreements",
+		treaties_sub = "Active agreements and alliances of the world",
+		empty_feed = "[COLOR_Grey]Nothing yet. Leaders negotiate at the start of your turns.[ENDCOLOR]",
+		thinking = "[COLOR_Grey]…is thinking[ENDCOLOR]",
+		you = " (you)", system = "System", player = "Player ",
+		accepted = "You accepted the offer.", declined = "You declined the offer.",
+	},
+	ru = {
+		title = "ИИ-дипломатия", open_tip = "Открыть чат с лидерами (LLM)", close_tip = "Закрыть (Esc)",
+		send = "Отправить", accept = "Принять", decline = "Отклонить",
+		pick_leader = "Выберите лидера слева",
+		bridge_off = "[COLOR_RED]Мост не подключён[ENDCOLOR] — запустите bridge (start.bat)",
+		bridge_on = "[COLOR_GREEN]Мост подключён[ENDCOLOR]  ",
+		chronicle = "Мировая хроника", chronicle_info = "переговоры между лидерами",
+		chronicle_sub = "Переговоры лидеров между собой, договоры, нарушения и союзнический долг",
+		treaties = "Договоры и блоки", treaties_info = "действующие соглашения",
+		treaties_sub = "Действующие соглашения и альянсы мира",
+		empty_feed = "[COLOR_Grey]Пока пусто. Лидеры ведут переговоры в начале ваших ходов.[ENDCOLOR]",
+		thinking = "[COLOR_Grey]…обдумывает ответ[ENDCOLOR]",
+		you = " (вы)", system = "Система", player = "Игрок ",
+		accepted = "Вы приняли предложение.", declined = "Вы отклонили предложение.",
+	},
+};
+
+local function DetectLang()
+	local id = Safe(function() return Locale.GetCurrentLanguageIdentifier(); end, "");
+	if string.sub(tostring(id), 1, 2) == "ru" then return "ru"; end
+	return "en";
+end
+
+local g_Lang = DetectLang();
+
+local function T(key)
+	local d = L10N[g_Lang] or L10N.en;
+	return d[key] or L10N.en[key] or key;
+end
+
 local function CurrentTurn()
 	return Safe(function() return Game.GetCurrentGameTurn(); end, 0);
 end
@@ -74,7 +124,7 @@ g_Names = g_Names or {};
 local function LeaderDisplay(pid)
 	local over = g_Names[tostring(pid)];
 	local cfg = PlayerConfigurations[pid];
-	local leader = Safe(function() return Locale.Lookup(cfg:GetLeaderName()); end, "Игрок " .. tostring(pid));
+	local leader = Safe(function() return Locale.Lookup(cfg:GetLeaderName()); end, T("player") .. tostring(pid));
 	local civ    = Safe(function() return Locale.Lookup(cfg:GetCivilizationShortDescription()); end, "");
 	if type(over) == "table" then
 		leader = over.leader or leader;
@@ -140,17 +190,17 @@ local function UpdateOpenButton()
 	local total = 0;
 	for _, n in pairs(g_Unread) do total = total + n; end
 	if total > 0 then
-		Controls.OpenButton:SetText("ИИ-дипломатия (" .. total .. ")");
+		Controls.OpenButton:SetText(T("title") .. " (" .. total .. ")");
 	else
-		Controls.OpenButton:SetText("ИИ-дипломатия");
+		Controls.OpenButton:SetText(T("title"));
 	end
 end
 
 local function UpdateBridgeStatus()
 	if (g_Time - g_LastPoll) > BRIDGE_TIMEOUT then
-		Controls.BridgeStatus:SetText("[COLOR_RED]Мост не подключён[ENDCOLOR] — запустите bridge (start.bat)");
+		Controls.BridgeStatus:SetText(T("bridge_off"));
 	else
-		Controls.BridgeStatus:SetText("[COLOR_GREEN]Мост подключён[ENDCOLOR]  " .. g_BridgeInfo);
+		Controls.BridgeStatus:SetText(T("bridge_on") .. g_BridgeInfo);
 	end
 end
 
@@ -168,8 +218,8 @@ end
 local function RefreshLeaders()
 	m_LeaderIM:ResetInstances();
 	local localID = LocalID();
-	AddFeedEntry(FEED_WORLD, "Мировая хроника", "переговоры между лидерами");
-	AddFeedEntry(FEED_TREATIES, "Договоры и блоки", "действующие соглашения");
+	AddFeedEntry(FEED_WORLD, T("chronicle"), T("chronicle_info"));
+	AddFeedEntry(FEED_TREATIES, T("treaties"), T("treaties_info"));
 	for _, id in ipairs(GetContactIDs()) do
 		local inst = m_LeaderIM:GetInstance();
 		SetBg(inst, 0.08, 0.18, 0.29);
@@ -239,7 +289,7 @@ local function RefreshMessages()
 	Controls.LeaderTreaties:SetText(tinfo and UIText(tinfo) or "");
 	Controls.LeaderTreaties:SetHide(tinfo == nil or tinfo == "");
 	if g_Selected == SEL_NONE then
-		Controls.LeaderHeader:SetText("Выберите лидера слева");
+		Controls.LeaderHeader:SetText(T("pick_leader"));
 		Controls.LeaderSubHeader:SetText("");
 		Controls.DealCard:SetHide(true);
 		LayoutChat();
@@ -248,16 +298,16 @@ local function RefreshMessages()
 
 	if feed then
 		if g_Selected == FEED_WORLD then
-			Controls.LeaderHeader:SetText("Мировая хроника");
-			Controls.LeaderSubHeader:SetText("Переговоры лидеров между собой, договоры, нарушения и союзнический долг");
+			Controls.LeaderHeader:SetText(T("chronicle"));
+			Controls.LeaderSubHeader:SetText(T("chronicle_sub"));
 		else
-			Controls.LeaderHeader:SetText("Договоры и блоки");
-			Controls.LeaderSubHeader:SetText("Действующие соглашения и альянсы мира");
+			Controls.LeaderHeader:SetText(T("treaties"));
+			Controls.LeaderSubHeader:SetText(T("treaties_sub"));
 		end
 		Controls.DealCard:SetHide(true);
 		local list = g_Conversations[g_Selected] or {};
 		if #list == 0 then
-			RenderMessage({ author = "", text = "[COLOR_Grey]Пока пусто. Лидеры ведут переговоры в начале ваших ходов.[ENDCOLOR]", kind = "leader" });
+			RenderMessage({ author = "", text = T("empty_feed"), kind = "leader" });
 		end
 		for _, m in ipairs(list) do RenderMessage(m); end
 		LayoutChat();
@@ -274,7 +324,7 @@ local function RefreshMessages()
 	if g_Typing[g_Selected] then
 		local inst = m_MsgIM:GetInstance();
 		inst.Author:SetText(leader);
-		inst.Text:SetText("[COLOR_Grey]…обдумывает ответ[ENDCOLOR]");
+		inst.Text:SetText(T("thinking"));
 	end
 
 	local deal = g_Deals[g_Selected];
@@ -343,7 +393,7 @@ local function OnSend()
 	if text == "" or g_Selected < 0 then return; end
 	local localID = LocalID();
 	local me = LeaderDisplay(localID);
-	AddMessage(g_Selected, me .. " (вы)", text, "player");
+	AddMessage(g_Selected, me .. T("you"), text, "player");
 	Enqueue({ type = "player_message", leader = g_Selected, text = text });
 	g_Typing[g_Selected] = true;
 	Controls.InputBox:ClearString();
@@ -356,7 +406,7 @@ local function OnDealResponse(accepted)
 	if deal == nil then return; end
 	Enqueue({ type = "deal_response", leader = g_Selected, deal_id = deal.id, accepted = accepted });
 	g_Deals[g_Selected] = nil;
-	AddMessage(g_Selected, "Система", accepted and "Вы приняли предложение." or "Вы отклонили предложение.", "system");
+	AddMessage(g_Selected, T("system"), accepted and T("accepted") or T("declined"), "system");
 	if not accepted then g_Typing[g_Selected] = true; end
 	RefreshAll();
 end
@@ -396,7 +446,7 @@ function LLM_Deliver(msg)
 	elseif t == "system" then
 		if pid ~= nil and pid >= 0 then
 			g_Typing[pid] = nil;
-			AddMessage(pid, "Система", msg.text or "", "system");
+			AddMessage(pid, T("system"), msg.text or "", "system");
 		end
 	elseif t == "deal_clear" then
 		g_Deals[pid] = nil;
@@ -404,6 +454,10 @@ function LLM_Deliver(msg)
 		if msg.allow_unmet ~= nil then g_AllowUnmet = msg.allow_unmet; end
 		if msg.info ~= nil then g_BridgeInfo = msg.info; end
 		if type(msg.names) == "table" then g_Names = msg.names; end
+		if msg.ui_lang ~= nil and L10N[msg.ui_lang] ~= nil and msg.ui_lang ~= g_Lang then
+			g_Lang = msg.ui_lang;
+			ApplyStaticTexts();
+		end
 	elseif t == "feed" then
 		-- {type="feed", feed="world"|"treaties", reset=bool, items={{author,text,kind}}, news=bool}
 		local fid = FEEDS[msg.feed or ""];
@@ -581,6 +635,18 @@ function LLM_InstallWMDHook()
 	end);
 end
 
+-- Static labels (re-applied when the bridge switches the UI language)
+function ApplyStaticTexts()
+	Controls.Title:SetText(T("title"));
+	pcall(function() Controls.OpenButton:SetToolTipString(T("open_tip")); end);
+	pcall(function() Controls.CloseButton:SetToolTipString(T("close_tip")); end);
+	Controls.SendButton:SetText(T("send"));
+	Controls.DealAccept:SetText(T("accept"));
+	Controls.DealDecline:SetText(T("decline"));
+	Controls.LeaderHeader:SetText(T("pick_leader"));
+	UpdateOpenButton();
+end
+
 local function OnLocalTurnBegin()
 	Enqueue({ type = "turn_begin" });
 	RefreshAll();
@@ -610,14 +676,7 @@ end
 -- ---------------------------------------------------------------------------
 function Initialize()
 	-- Надписи ставим из Lua: кириллица в атрибуте String у XML в игре не отображается
-	Controls.Title:SetText("ИИ-дипломатия");
-	Controls.OpenButton:SetText("ИИ-дипломатия");
-	pcall(function() Controls.OpenButton:SetToolTipString("Открыть чат с лидерами (LLM)"); end);
-	pcall(function() Controls.CloseButton:SetToolTipString("Закрыть (Esc)"); end);
-	Controls.SendButton:SetText("Отправить");
-	Controls.DealAccept:SetText("Принять");
-	Controls.DealDecline:SetText("Отклонить");
-	Controls.LeaderHeader:SetText("Выберите лидера слева");
+	ApplyStaticTexts();
 
 	Controls.OpenButton:RegisterCallback(Mouse.eLClick, Toggle);
 	Controls.CloseButton:RegisterCallback(Mouse.eLClick, Close);

@@ -17,8 +17,12 @@ By contributing you agree that your contribution is licensed under the [MIT Lice
   types, events leaders should react to, better negotiation logic.
 - **Share personas.** Good leader descriptions make the mod. Send a PR that adds entries to `bridge/personas.yaml`.
   Keep them about the leaders as game characters.
-- **Translate.** The UI strings live in `mod/LLMLeaders/UI/LLMLeaders.lua`, and the prompts live in `bridge/src/brain.js`
-  and `bridge/src/diplomacy.js`. Both are currently Russian. An English or other-language UI is a great contribution.
+- **Translate.** The interface exists in English and Russian. To add a language, add a dictionary in two places:
+  - the `L10N` table in `mod/LLMLeaders/UI/LLMLeaders.lua` (window labels);
+  - `bridge/src/i18n.js` (chronicle, deal cards, system messages, treaty registry).
+
+  The LLM prompts in `bridge/src/brain.js` and `bridge/src/diplomacy.js` are written in Russian. Translating them to
+  English would make the code easier for contributors.
 - **Code.** Fix bugs, add deal types, improve the UI layout, add tests.
 
 ## Development setup

@@ -28,7 +28,9 @@ function loadYaml(name, required) {
 const CONFIG = process.env.LLM_BRIDGE_CONFIG || 'config.yaml';
 const DATA_DIR = process.env.LLM_BRIDGE_DATA || path.join(ROOT, 'data');
 const cfg = loadYaml(CONFIG, true);
-let personas = loadYaml('personas.yaml', false);
+// файл характеров: можно подменить переменной LLM_BRIDGE_PERSONAS (например, для отдельной партии)
+const PERSONAS = process.env.LLM_BRIDGE_PERSONAS || 'personas.yaml';
+let personas = loadYaml(PERSONAS, false);
 cfg.llm = cfg.llm || {};
 const llm = createLLM(cfg.llm);
 
@@ -37,9 +39,9 @@ if (!cfg.llm.api_key && !process.env.LLM_API_KEY && !/localhost|127\.0\.0\.1/.te
 }
 
 // перечитывать personas.yaml на лету — характеры можно менять посреди партии
-fs.watchFile(path.join(ROOT, 'personas.yaml'), { interval: 2000 }, () => {
+fs.watchFile(path.isAbsolute(PERSONAS) ? PERSONAS : path.join(ROOT, PERSONAS), { interval: 2000 }, () => {
   try {
-    personas = loadYaml('personas.yaml', false);
+    personas = loadYaml(PERSONAS, false);
     if (brain) brain.personas = personas;
     log('[personas] характеры перезагружены');
     sendNames();
@@ -69,6 +71,7 @@ async function attachGame() {
     type: 'config',
     allow_unmet: !!cfg.behavior?.allow_unmet,
     info: `${llm.provider}: ${cfg.llm.model}`,
+    ui_lang: brain?.uiLang,
   });
   await sendNames();
   // вернуть в окно переписку, хронику переговоров и реестр договоров (UI не хранит их между загрузками)

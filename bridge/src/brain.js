@@ -1,6 +1,7 @@
 // «Мозг» лидеров: промпты, диалоги, сделки, стратегия.
 import { clamp, toInt, normItems } from './util.js';
 import { WorldDiplomacy, KINDS } from './diplomacy.js';
+import { makeT, uiLang } from './i18n.js';
 
 const STATE_RU = {
   DIPLO_STATE_ALLIED: 'союз',
@@ -24,6 +25,8 @@ export class Brain {
     this.queues = new Map();      // pid -> Promise (последовательная обработка на лидера)
     this.callsThisTurn = 0;
     this.lastWantsPeace = new Map(); // pid -> Set(pid)
+    this.uiLang = uiLang(cfg);
+    this.t = makeT(this.uiLang);
     this.world = new WorldDiplomacy(this);
   }
 
@@ -87,7 +90,7 @@ export class Brain {
       const L = this.mem.data.leaders[this.key(p)];
       if (!L?.history?.length) continue;
       const messages = L.history.slice(-14).map((h) => ({
-        author: h.who === 'ai' ? p.leader : h.who === 'player' ? `${human.leader} (вы)` : 'Система',
+        author: h.who === 'ai' ? p.leader : h.who === 'player' ? this.t('you', { name: human.leader }) : this.t('system'),
         text: String(h.text).slice(0, 900),
         kind: h.who === 'ai' ? 'leader' : h.who === 'player' ? 'player' : 'system',
       }));
@@ -205,7 +208,7 @@ export class Brain {
 ${this.persona(ai)}
 
 ПРАВИЛА РАЗГОВОРА:
-- Говори от первого лица, на языке: ${lang}. ${this.brevity()} Не повторяй прежних фраз и шаблонов.
+- Говори от первого лица, на языке: ${lang} (на нём же пиши title и summary документов). ${this.brevity()} Не повторяй прежних фраз и шаблонов.
 - Сначала отвечай на то, что собеседник РЕАЛЬНО сказал: вопрос, шутку, угрозу, оскорбление, просьбу, новость. Дипломатия — это не только торговля:
   обсуждай соседей, войны, союзы, обиды, амбиции, слухи, свои планы и взгляды.
 - Торговлю предлагай, только если речь зашла о ней или тебе действительно остро что-то нужно. Не возвращайся к предложению,
@@ -368,9 +371,9 @@ ${situation}
       this.log(`[llm] ошибка: ${e.message}`);
       const noMoney = e.status === 402 || /insufficient.?(balance|quota)|credit_balance|no credits/i.test(e.message);
       const text = noMoney
-        ? 'Закончился баланс у провайдера нейросети — пополните счёт и напишите лидеру снова.'
-        : e.status === 401 ? 'Провайдер отклонил ключ API — проверьте api_key в config.yaml.'
-        : `Ошибка LLM: ${String(e.message).slice(0, 180)}`;
+        ? this.t('llm_no_money')
+        : e.status === 401 ? this.t('llm_bad_key')
+        : this.t('llm_error', { error: String(e.message).slice(0, 180) });
       await this.game.deliver({ type: 'system', leader: ai.id, text });
       return;
     }
@@ -400,8 +403,8 @@ ${situation}
     } else if (problem) {
       this.log(`[deal] предложение ${ai.leader} отброшено: ${problem}`);
       // чтобы в следующий раз лидер знал, что сделка не состоялась
-      this.mem.addHistory(key, 'system', `Предложенная сделка не была оформлена: ${problem}.`, turn);
-      if (this.cfg.debug) await this.game.deliver({ type: 'system', leader: ai.id, text: `(сделка отброшена правилами: ${problem})` });
+      this.mem.addHistory(key, 'system', this.t('deal_not_made', { problem }), turn);
+      if (this.cfg.debug) await this.game.deliver({ type: 'system', leader: ai.id, text: this.t('deal_dropped_debug', { problem }) });
     }
 
     this.log(`[${ai.leader}] ${reply}${deal ? `  {сделка: ${deal.text}}` : ''}${op ? `  (отношение ${op > 0 ? '+' : ''}${op})` : ''}`);
@@ -444,28 +447,28 @@ ${situation}
   itemsText(items) {
     return items.map((i) => {
       switch (i.type) {
-        case 'gold': return `${i.amount} золота`;
-        case 'gold_per_turn': return `${i.amount} золота/ход × ${i.turns} ход.`;
-        case 'resource': return `${this.resName(i.resource)} ×${i.amount}${this.isLuxury(i.resource) ? ' (на 30 ходов)' : ''}`;
-        case 'favor': return `${i.amount} благосклонности`;
-        case 'peace': return 'мир';
-        case 'open_borders': return 'право прохода (открытые границы) на 30 ходов';
-        case 'unit': return `${this.unitName(i.unit)} ×${i.amount} (войска)`;
-        case 'wmd': return `${i.wmd === 'thermonuclear' ? 'термоядерный' : 'ядерный'} заряд ×${i.amount}`;
+        case 'gold': return this.t('item_gold', { n: i.amount });
+        case 'gold_per_turn': return this.t('item_gpt', { n: i.amount, turns: i.turns });
+        case 'resource': return this.t('item_res', { name: this.resName(i.resource), n: i.amount, lux: this.isLuxury(i.resource) });
+        case 'favor': return this.t('item_favor', { n: i.amount });
+        case 'peace': return this.t('item_peace');
+        case 'open_borders': return this.t('item_ob');
+        case 'unit': return this.t('item_unit', { name: this.unitName(i.unit), n: i.amount });
+        case 'wmd': return this.t('item_wmd', { thermo: i.wmd === 'thermonuclear', n: i.amount });
         default: return i.type;
       }
-    }).join(', ') || 'ничего';
+    }).join(', ') || this.t('nothing');
   }
 
   dealText(ai, d) {
     const lines = [];
     if (d.document) {
       const sm = d.document.summary || '';
-      lines.push(`Документ: «${d.document.title}» (${KINDS[d.document.kind]?.ru || d.document.kind})` +
-        `${sm ? ' — ' + (sm.length > 170 ? sm.slice(0, sm.lastIndexOf(' ', 169)) + '…' : sm) : ''}`);
+      lines.push(this.t('deal_doc', { title: d.document.title, kind: this.world.kindName(d.document.kind),
+        summary: sm.length > 170 ? sm.slice(0, sm.lastIndexOf(' ', 169)) + '…' : sm }));
     }
     if (d.ai_gives.length || d.player_gives.length || !d.document) {
-      lines.push(`${ai.leader} даёт: ${this.itemsText(d.ai_gives)}`, `Вы даёте: ${this.itemsText(d.player_gives)}`);
+      lines.push(this.t('deal_gives', { leader: ai.leader, items: this.itemsText(d.ai_gives) }), this.t('deal_you_give', { items: this.itemsText(d.player_gives) }));
     }
     return lines.join('\n');
   }
@@ -498,28 +501,28 @@ ${situation}
   // Проверка одного передаваемого предмета у отдающей стороны.
   // native = в сделке участвует игрок-человек: тогда доступны нативные сделки игры (люкс, право прохода).
   validateItem(giver, i, { native = false } = {}) {
-    if (!['gold', 'gold_per_turn', 'resource', 'favor', 'peace', 'open_borders', 'unit', 'wmd'].includes(i.type)) return `неизвестный тип ${i.type}`;
+    if (!['gold', 'gold_per_turn', 'resource', 'favor', 'peace', 'open_borders', 'unit', 'wmd'].includes(i.type)) return this.t('p_unknown_type', { type: i.type });
     if (i.type === 'wmd') {
       const have = i.wmd === 'thermonuclear' ? giver.nukes?.thermo || 0 : giver.nukes?.nuclear || 0;
-      if (have < i.amount) return `у ${giver.leader} нет ${i.amount} ${i.wmd === 'thermonuclear' ? 'термоядерных' : 'ядерных'} зарядов (есть ${have})`;
+      if (have < i.amount) return this.t('p_no_wmd', { who: giver.leader, n: i.amount, thermo: i.wmd === 'thermonuclear', have });
       return null;
     }
     if (i.type === 'unit') {
       const have = giver.units?.[i.unit]?.count || 0;
-      if (!i.unit) return 'не указан тип юнита';
-      if (have < i.amount) return `у ${giver.leader} нет ${i.amount} юнитов «${this.unitName(i.unit)}» (есть ${have})`;
+      if (!i.unit) return this.t('p_no_unit_type');
+      if (have < i.amount) return this.t('p_no_units', { who: giver.leader, n: i.amount, name: this.unitName(i.unit), have });
       return null;
     }
-    if (!['peace', 'open_borders'].includes(i.type) && i.amount <= 0) return 'количество должно быть > 0';
-    if (i.type === 'open_borders' && !native) return 'право прохода между ИИ пока не оформляется';
-    if (i.type === 'gold' && i.amount > giver.gold) return `у ${giver.leader} нет ${i.amount} золота`;
-    if (i.type === 'gold_per_turn' && (i.turns < 1 || i.turns > 60)) return 'срок выплат 1–60 ходов';
-    if (i.type === 'favor' && i.amount > giver.favor) return `у ${giver.leader} нет ${i.amount} благосклонности`;
+    if (!['peace', 'open_borders'].includes(i.type) && i.amount <= 0) return this.t('p_amount');
+    if (i.type === 'open_borders' && !native) return this.t('p_ob_ai');
+    if (i.type === 'gold' && i.amount > giver.gold) return this.t('p_no_gold', { who: giver.leader, n: i.amount });
+    if (i.type === 'gold_per_turn' && (i.turns < 1 || i.turns > 60)) return this.t('p_turns');
+    if (i.type === 'favor' && i.amount > giver.favor) return this.t('p_no_favor', { who: giver.leader, n: i.amount });
     if (i.type === 'resource') {
       if (this.isLuxury(i.resource)) {
-        if (!native) return 'люксовые ресурсы между ИИ сделкой передать нельзя';
-        if ((giver.luxury?.[i.resource] || 0) < i.amount) return `у ${giver.leader} нет ${i.amount} ${this.resName(i.resource)}`;
-      } else if ((giver.strategic[i.resource] || 0) < i.amount) return `у ${giver.leader} нет ${i.amount} ${this.resName(i.resource)}`;
+        if (!native) return this.t('p_lux_ai');
+        if ((giver.luxury?.[i.resource] || 0) < i.amount) return this.t('p_no_res', { who: giver.leader, n: i.amount, name: this.resName(i.resource) });
+      } else if ((giver.strategic[i.resource] || 0) < i.amount) return this.t('p_no_res', { who: giver.leader, n: i.amount, name: this.resName(i.resource) });
     }
     return null;
   }
@@ -528,7 +531,7 @@ ${situation}
     const atWar = !!ai.relations[String(human.id)]?.atWar;
     for (const [giver, items] of [[ai, d.ai_gives], [human, d.player_gives]]) {
       for (const i of items) {
-        if (i.type === 'peace' && !atWar) return 'войны нет — мир не нужен';
+        if (i.type === 'peace' && !atWar) return this.t('p_no_war');
         const p = this.validateItem(giver, i, { native: true });
         if (p) return p;
       }
@@ -603,26 +606,26 @@ ${situation}
     const text = this.dealText(ai, pending).replace('\n', '; ');
 
     if (!ev.accepted) {
-      this.mem.addHistory(key, 'system', `Игрок отклонил сделку: ${text}`, this.snap.turn);
+      this.mem.addHistory(key, 'system', this.t('deal_declined_hist', { text }), this.snap.turn);
       return this.respond(ai.id, `Собеседник ОТКЛОНИЛ твоё предложение (${text}). Отреагируй в своём характере. Можешь предложить другие условия или отступиться.`);
     }
 
     const problem = this.validateDeal(ai, human, pending);
     if (problem) {
-      await this.game.deliver({ type: 'system', leader: ai.id, text: `Сделка сорвалась: ${problem}.` });
+      await this.game.deliver({ type: 'system', leader: ai.id, text: this.t('deal_failed', { problem }) });
       return;
     }
     try {
       await this.executeDeal(ai, human, pending);
     } catch (e) {
       this.log(`[deal] ошибка исполнения: ${e.message}`);
-      await this.game.deliver({ type: 'system', leader: ai.id, text: `Ошибка исполнения сделки: ${e.message}` });
+      await this.game.deliver({ type: 'system', leader: ai.id, text: this.t('deal_error', { error: e.message }) });
       return;
     }
     this.log(`[deal] заключена: ${text}`);
-    this.mem.addHistory(key, 'system', `Сделка заключена: ${text}`, this.snap.turn);
+    this.mem.addHistory(key, 'system', this.t('deal_done', { text }), this.snap.turn);
     this.mem.addNote(key, `Заключена сделка с игроком: ${text}`, this.snap.turn);
-    await this.game.deliver({ type: 'system', leader: ai.id, text: `Сделка заключена: ${text}` });
+    await this.game.deliver({ type: 'system', leader: ai.id, text: this.t('deal_done', { text }) });
     if (this.b.react_to_accepted_deals !== false) {
       await this.respond(ai.id, 'Собеседник ПРИНЯЛ твоё предложение, сделка уже исполнена. Коротко отреагируй (одна-две фразы). Новую сделку не предлагай.');
     }
@@ -638,7 +641,7 @@ ${situation}
       if (!from || !to) continue;
       const atWar = from.relations[String(to.id)]?.atWar;
       if (atWar || from.gold < r.amount) {
-        const why = atWar ? 'Выплаты разорваны из-за войны' : `Выплаты прекращены: у ${from.leader} не хватило золота`;
+        const why = atWar ? this.t('pay_war') : this.t('pay_nogold', { who: from.leader });
         if (from.human || to.human) {
           const ai = from.human ? to : from;
           await this.game.deliver({ type: 'system', leader: ai.id, text: why + '.' }).catch(() => {});
@@ -817,7 +820,10 @@ ${situation}
         : `${p.leader} нарастил ядерный арсенал до ${n} зарядов`;
       this.mem.addWorld(text, turn);
       this.log(`[power] ${text}`);
-      await this.world.publish({ turn, title: 'Ядерный статус', items: [{ author: '[COLOR_RED]Хроника[ENDCOLOR]', text: text + '.', kind: 'outcome' }] })
+      const shown = was === 0
+        ? this.t('nuke_new', { who: p.leader, civ: p.civ, n: p.nukes.nuclear, t: p.nukes.thermo })
+        : this.t('nuke_more', { who: p.leader, n });
+      await this.world.publish({ turn, title: this.t('t_nuclear_status'), items: [{ author: `[COLOR_RED]${this.t('chron')}[ENDCOLOR]`, text: shown + '.', kind: 'outcome' }] })
         .catch(() => {});
       if (p.human) news.push(text);
     }
@@ -919,7 +925,7 @@ ${this.persona(ai)}
  "make_peace_with": [id тех, с кем хочешь мира],
  "negotiate": [{"id": id правителя-ИИ, "goal": "чего хочешь добиться: союз, блок, меморандум, торговля, предупреждение…"}] (0–1 шт.),
  "opinions": [{"id": id, "change": от -5 до 5}],
- "message_to_player": null или реплика игроку-человеку (если хочешь ему что-то сказать сейчас; ${this.b.reply_style === 'normal' ? '1–3 предложения' : 'одно короткое предложение по сути'}),
+ "message_to_player": null или реплика игроку-человеку на языке ${this.cfg.language || 'русский'} (если хочешь ему что-то сказать сейчас; ${this.b.reply_style === 'normal' ? '1–3 предложения' : 'одно короткое предложение по сути'}),
  "note": null или краткая запись о твоих планах на будущее
 }`;
     const user = `Ход ${this.snap.turn}.
